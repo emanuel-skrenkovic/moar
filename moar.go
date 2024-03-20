@@ -514,6 +514,10 @@ func noLineNumbersDefault() bool {
 	return false
 }
 
+func shortOptionDescription(longName string) string {
+	return fmt.Sprintf("Short option for '%s'", longName)
+}
+
 func pagerFromArgs(
 	args []string,
 	newScreen func(mouseMode twin.MouseMode, terminalColorCount twin.ColorType) (twin.Screen, error),
@@ -524,53 +528,143 @@ func pagerFromArgs(
 ) {
 	// FIXME: If we get a CTRL-C, get terminal back into a useful state before terminating
 
-	flagSet := flag.NewFlagSet("",
-		flag.ContinueOnError, // We want to do our own error handling
+	flagSet := flag.NewFlagSet("", flag.ContinueOnError) // We want to do our own error handling
+	flagSet.SetOutput(io.Discard)                        // We want to do our own printing
+
+	printVersionName := "version"
+	printVersion := flagSet.Bool(printVersionName, false, "Prints the moar version number")
+	flagSet.BoolVar(printVersion, "v", false, shortOptionDescription(printVersionName))
+
+	debugName := "debug"
+	debug := flagSet.Bool(debugName, false, "Print debug logs after exiting")
+	flagSet.BoolVar(debug, "d", false, shortOptionDescription(debugName))
+
+	traceName := "trace"
+	trace := flagSet.Bool(traceName, false, "Print trace logs after exiting")
+	flagSet.BoolVar(trace, "t", false, shortOptionDescription(traceName))
+
+	wrapName := "wrap"
+	wrap := flagSet.Bool(wrapName, false, "Wrap long lines")
+	flagSet.BoolVar(wrap, "w", false, shortOptionDescription(wrapName))
+
+	followName := "follow"
+	follow := flagSet.Bool(followName, false, "Follow piped input just like \"tail -f\"")
+	flagSet.BoolVar(follow, "f", false, shortOptionDescription(followName))
+
+	styleName := "style"
+	styleOption, styleFunc := flagSetFunc(
+		flagSet,
+		styleName,
+		nil,
+		"Highlighting `style` from https://xyproto.github.io/splash/docs/longer/all.html",
+		parseStyleOption,
 	)
-	flagSet.SetOutput(io.Discard) // We want to do our own printing
+	flagSet.Var(funcValue(styleFunc), "s", shortOptionDescription(styleName))
 
-	printVersion := flagSet.Bool("version", false, "Prints the moar version number")
-	debug := flagSet.Bool("debug", false, "Print debug logs after exiting")
-	trace := flagSet.Bool("trace", false, "Print trace logs after exiting")
-
-	wrap := flagSet.Bool("wrap", false, "Wrap long lines")
-	follow := flagSet.Bool("follow", false, "Follow piped input just like \"tail -f\"")
-	styleOption := flagSetFunc(flagSet,
-		"style", nil,
-		"Highlighting `style` from https://xyproto.github.io/splash/docs/longer/all.html", parseStyleOption)
-	lexer := flagSetFunc(flagSet,
-		"lang", nil,
-		"File contents, used for highlighting. Mime type or file extension (\"html\"). Default is to guess by filename.", parseLexerOption)
+	lexerName := "lang"
+	lexer, lexerFunc := flagSetFunc(
+		flagSet,
+		lexerName,
+		nil,
+		"File contents, used for highlighting. Mime type or file extension (\"html\"). Default is to guess by filename.",
+		parseLexerOption,
+	)
+	flagSet.Var(funcValue(lexerFunc), "l", shortOptionDescription(lexerName))
 
 	defaultFormatter, err := parseColorsOption("auto")
 	if err != nil {
 		panic(fmt.Errorf("Failed parsing default formatter: %w", err))
 	}
-	terminalColorsCount := flagSetFunc(flagSet,
-		"colors", defaultFormatter, "Highlighting palette size: 8, 16, 256, 16M, auto", parseColorsOption)
 
-	noLineNumbers := flagSet.Bool("no-linenumbers", noLineNumbersDefault(), "Hide line numbers on startup, press left arrow key to show")
-	noStatusBar := flagSet.Bool("no-statusbar", false, "Hide the status bar, toggle with '='")
-	quitIfOneScreen := flagSet.Bool("quit-if-one-screen", false, "Don't page if contents fits on one screen")
-	noClearOnExit := flagSet.Bool("no-clear-on-exit", false, "Retain screen contents when exiting moar")
-	statusBarStyle := flagSetFunc(flagSet, "statusbar", m.STATUSBAR_STYLE_INVERSE,
-		"Status bar `style`: inverse, plain or bold", parseStatusBarStyle)
-	unprintableStyle := flagSetFunc(flagSet, "render-unprintable", textstyles.UnprintableStyleHighlight,
-		"How unprintable characters are rendered: highlight or whitespace", parseUnprintableStyle)
-	scrollLeftHint := flagSetFunc(flagSet, "scroll-left-hint",
-		twin.NewCell('<', twin.StyleDefault.WithAttr(twin.AttrReverse)),
-		"Shown when view can scroll left. One character with optional ANSI highlighting.", parseScrollHint)
-	scrollRightHint := flagSetFunc(flagSet, "scroll-right-hint",
-		twin.NewCell('>', twin.StyleDefault.WithAttr(twin.AttrReverse)),
-		"Shown when view can scroll right. One character with optional ANSI highlighting.", parseScrollHint)
-	shift := flagSetFunc(flagSet, "shift", 16, "Horizontal scroll `amount` >=1, defaults to 16", parseShiftAmount)
-	mouseMode := flagSetFunc(
+	terminalColorsCountName := "colors"
+	terminalColorsCount, terminalColorsCountFunc := flagSetFunc(
 		flagSet,
-		"mousemode",
+		terminalColorsCountName,
+		defaultFormatter,
+		"Highlighting palette size: 8, 16, 256, 16M, auto",
+		parseColorsOption,
+	)
+	flagSet.Var(funcValue(terminalColorsCountFunc), "c", shortOptionDescription(terminalColorsCountName))
+
+	noLineNumbersName := "no-linenumbers"
+	noLineNumbers := flagSet.Bool(
+		noLineNumbersName,
+		noLineNumbersDefault(),
+		"Hide line numbers on startup, press left arrow key to show",
+	)
+	flagSet.BoolVar(noLineNumbers, "nl", noLineNumbersDefault(), shortOptionDescription(noLineNumbersName))
+
+	noStatusBarName := "no-statusbar"
+	noStatusBar := flagSet.Bool(noStatusBarName, false, "Hide the status bar, toggle with '='")
+	flagSet.BoolVar(noStatusBar, "nsb", false, shortOptionDescription(noStatusBarName))
+
+	quitIfOneScreenName := "quit-if-one-screen"
+	quitIfOneScreen := flagSet.Bool(quitIfOneScreenName, false, "Don't page if contents fits on one screen")
+	flagSet.BoolVar(quitIfOneScreen, "qios", false, shortOptionDescription(quitIfOneScreenName))
+
+	noClearOnExitName := "no-clear-on-exit"
+	noClearOnExit := flagSet.Bool(noClearOnExitName, false, "Retain screen contents when exiting moar")
+	flagSet.BoolVar(noClearOnExit, "ncoe", false, shortOptionDescription(noClearOnExitName))
+
+	statusBarStyleName := "statusbar"
+	statusBarStyle, statusBarStyleFunc := flagSetFunc(
+		flagSet,
+		statusBarStyleName,
+		m.STATUSBAR_STYLE_INVERSE,
+		"Status bar `style`: inverse, plain or bold",
+		parseStatusBarStyle,
+	)
+	flagSet.Var(funcValue(statusBarStyleFunc), "sb", shortOptionDescription(statusBarStyleName))
+
+	unprintableStyleName := "render-unprintable"
+	unprintableStyle, unprintableStyleFunc := flagSetFunc(
+		flagSet,
+		unprintableStyleName,
+		textstyles.UnprintableStyleHighlight,
+		"How unprintable characters are rendered: highlight or whitespace",
+		parseUnprintableStyle,
+	)
+	flagSet.Var(funcValue(unprintableStyleFunc), "ru", shortOptionDescription(unprintableStyleName))
+
+	scrollLeftHintName := "scroll-left-hint"
+	scrollLeftHint, scrollLeftHintFunc := flagSetFunc(
+		flagSet,
+		scrollLeftHintName,
+		twin.NewCell('<', twin.StyleDefault.WithAttr(twin.AttrReverse)),
+		"Shown when view can scroll left. One character with optional ANSI highlighting.",
+		parseScrollHint,
+	)
+	flagSet.Var(funcValue(scrollLeftHintFunc), "slh", shortOptionDescription(scrollLeftHintName))
+
+	scrollRightHintName := "scroll-right-hint"
+	scrollRightHint, scrollRightHintFunc := flagSetFunc(
+		flagSet,
+		scrollRightHintName,
+		twin.NewCell('>', twin.StyleDefault.WithAttr(twin.AttrReverse)),
+		"Shown when view can scroll right. One character with optional ANSI highlighting.",
+		parseScrollHint,
+	)
+	flagSet.Var(funcValue(scrollRightHintFunc), "srh", shortOptionDescription(scrollRightHintName))
+
+	shiftName := "shift"
+	shift, shiftFunc := flagSetFunc(
+		flagSet,
+		shiftName,
+		16,
+		"Horizontal scroll `amount` >=1, defaults to 16",
+		parseShiftAmount,
+	)
+	flagSet.Var(funcValue(shiftFunc), "sh", shortOptionDescription(shiftName))
+
+	mouseModeName := "mousemode"
+	mouseMode, mouseModeFunc := flagSetFunc(
+		flagSet,
+		mouseModeName,
 		twin.MouseModeAuto,
 		"Mouse `mode`: auto, select or scroll: https://github.com/walles/moar/blob/master/MOUSE.md",
 		parseMouseMode,
 	)
+	flagSet.Var(funcValue(mouseModeFunc), "mm", shortOptionDescription(mouseModeName))
 
 	// Combine flags from environment and from command line
 	flags := args[1:]
@@ -809,22 +903,35 @@ func main() {
 	}
 }
 
+type funcValue func(string) error
+
+func (f funcValue) Set(s string) error { return f(s) }
+
+func (f funcValue) String() string { return "" }
+
 // Define a generic flag with specified name, default value, and usage string.
 // The return value is the address of a variable that stores the parsed value of
 // the flag.
-func flagSetFunc[T any](flagSet *flag.FlagSet, name string, defaultValue T, usage string, parser func(valueString string) (T, error)) *T {
+func flagSetFunc[T any](
+	flagSet *flag.FlagSet,
+	name string,
+	defaultValue T,
+	usage string,
+	parser func(valueString string) (T, error),
+) (*T, func(valueString string) error) {
 	parsed := defaultValue
 
-	flagSet.Func(name, usage, func(valueString string) error {
+	f := func(valueString string) error {
 		parseResult, err := parser(valueString)
 		if err != nil {
 			return err
 		}
 		parsed = parseResult
 		return nil
-	})
+	}
+	flagSet.Func(name, usage, f)
 
-	return &parsed
+	return &parsed, f
 }
 
 func startPaging(pager *m.Pager, screen twin.Screen, chromaStyle *chroma.Style, chromaFormatter *chroma.Formatter) {
