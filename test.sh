@@ -82,9 +82,12 @@ echo Test --version...
 diff -u <(./moar --version) <(git describe --tags --dirty --always)
 
 echo Test that the man page and --help document the same set of options...
-MAN_OPTIONS="$(grep -E '^\\fB\\-' moar.1 | cut -d\\ -f4- | sed 's/fR.*//' | sed 's/\\//g')"
-MOAR_OPTIONS="$(./moar --help | grep -E '^  -' | cut -d' ' -f3 | grep -v -- -version)"
-diff -u <(echo "${MAN_OPTIONS}") <(echo "${MOAR_OPTIONS}")
+LONG_MAN_OPTIONS="$(grep -E '^\\fB\\-' moar.1 | cut -d\\ -f4- | sed 's/fR.*//' | sed 's/\\//g' | sed 's/\-//g')"
+SHORT_MAN_OPTIONS="$(grep -E '^\\fB\\-' moar.1 | cut -d\\ -f3-4 | sed 's/, \\\-.*//' | sed 's/\\//g' | sed 's/\-//g')"
+MAN_OPTIONS=$(echo -e "${LONG_MAN_OPTIONS}\n${SHORT_MAN_OPTIONS}")
+MAN_OPTIONS=$(echo "${MAN_OPTIONS}" | sort)
+MOAR_OPTIONS="$(./moar --help | grep -E '^  -' | cut -w -f2-2 | grep -v -- -version | grep -v -- -v | sed 's/\-//g' | sort)"
+diff -y <(echo "${MAN_OPTIONS}") <(echo "${MOAR_OPTIONS}")
 
 # FIXME: On unknown command line options, test that help text goes to stderr
 
